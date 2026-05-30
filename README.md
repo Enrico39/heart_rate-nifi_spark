@@ -42,6 +42,10 @@ The architecture is deployed on a **3-node Google Cloud Dataproc cluster** (1 Ma
 
 ---
 
+<!--
+
+
+
 ## 📁 Repository Structure
 
 * `heart_rate_nifi_flow.xml`: Apache NiFi template file containing the fully validated 8-processor pipeline.
@@ -163,3 +167,5 @@ Batch: 1
   * Patient `p003` has a slow heart rate while sleeping (`low_alerts = 3` due to bradycardia).
   * Patient `p002` is running, showing high heart rates (`high_alerts = 4` due to exertion).
   * Patient `p001` has high heart rates while resting (`critical_alerts = 2` due to acute tachycardia), triggering immediate concern for medical responders.
+
+  -->
