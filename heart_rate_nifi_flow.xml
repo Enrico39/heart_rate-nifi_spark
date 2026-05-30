@@ -1,0 +1,748 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<template encoding-version="1.3">
+    <description>Heart Rate Monitoring MVP Flow v2 - Ottimizzato per Dataproc 3 nodi con mitigazione small files ed arricchimento Jolt.</description>
+    <groupId>d6387a32-018f-1000-0000-0000305f63d6</groupId>
+    <name>HeartRate_MVP_v2</name>
+    <snippet>
+        <!-- 1. PROCESSOR: ListenHTTP -->
+        <processors>
+            <id>c1000000-0000-0000-0000-000000000000</id>
+            <parentGroupId>d6387a32-018f-1000-0000-0000305f63d6</parentGroupId>
+            <position>
+                <x>0.0</x>
+                <y>0.0</y>
+            </position>
+            <bundle>
+                <artifact>nifi-standard-nar</artifact>
+                <group>org.apache.nifi</group>
+                <version>1.19.1</version>
+            </bundle>
+            <class>org.apache.nifi.processors.standard.ListenHTTP</class>
+            <config>
+                <bulletinLevel>WARN</bulletinLevel>
+                <comments>Ingestione REST HTTP</comments>
+                <concurrentlySchedulableTaskCount>1</concurrentlySchedulableTaskCount>
+                <descriptors>
+                    <entry>
+                        <key>Listening Port</key>
+                        <value>
+                            <name>Listening Port</name>
+                        </value>
+                    </entry>
+                    <entry>
+                        <key>Base Path</key>
+                        <value>
+                            <name>Base Path</name>
+                        </value>
+                    </entry>
+                </descriptors>
+                <properties>
+                    <entry>
+                        <key>Listening Port</key>
+                        <value>8080</value>
+                    </entry>
+                    <entry>
+                        <key>Base Path</key>
+                        <value>heartrate</value>
+                    </entry>
+                </properties>
+                <schedulingPeriod>0 sec</schedulingPeriod>
+                <schedulingStrategy>TIMER_DRIVEN</schedulingStrategy>
+                <penaltyDuration>30 sec</penaltyDuration>
+                <yieldDuration>1 sec</yieldDuration>
+            </config>
+            <name>ListenHTTP_Ingestion</name>
+            <type>org.apache.nifi.processors.standard.ListenHTTP</type>
+        </processors>
+
+        <!-- 2. PROCESSOR: EvaluateJsonPath -->
+        <processors>
+            <id>c2000000-0000-0000-0000-000000000000</id>
+            <parentGroupId>d6387a32-018f-1000-0000-0000305f63d6</parentGroupId>
+            <position>
+                <x>0.0</x>
+                <y>200.0</y>
+            </position>
+            <bundle>
+                <artifact>nifi-standard-nar</artifact>
+                <group>org.apache.nifi</group>
+                <version>1.19.1</version>
+            </bundle>
+            <class>org.apache.nifi.processors.standard.EvaluateJsonPath</class>
+            <config>
+                <bulletinLevel>WARN</bulletinLevel>
+                <comments>Estrazione parametri</comments>
+                <concurrentlySchedulableTaskCount>1</concurrentlySchedulableTaskCount>
+                <descriptors>
+                    <entry>
+                        <key>Destination</key>
+                        <value>
+                            <name>Destination</name>
+                        </value>
+                    </entry>
+                    <entry>
+                        <key>Return Type</key>
+                        <value>
+                            <name>Return Type</name>
+                        </value>
+                    </entry>
+                    <entry>
+                        <key>heart_rate</key>
+                        <value>
+                            <name>heart_rate</name>
+                        </value>
+                    </entry>
+                    <entry>
+                        <key>activity</key>
+                        <value>
+                            <name>activity</name>
+                        </value>
+                    </entry>
+                    <entry>
+                        <key>patient_id</key>
+                        <value>
+                            <name>patient_id</name>
+                        </value>
+                    </entry>
+                </descriptors>
+                <properties>
+                    <entry>
+                        <key>Destination</key>
+                        <value>flowfile-attribute</value>
+                    </entry>
+                    <entry>
+                        <key>Return Type</key>
+                        <value>json</value>
+                    </entry>
+                    <entry>
+                        <key>heart_rate</key>
+                        <value>$.heart_rate</value>
+                    </entry>
+                    <entry>
+                        <key>activity</key>
+                        <value>$.activity</value>
+                    </entry>
+                    <entry>
+                        <key>patient_id</key>
+                        <value>$.patient_id</value>
+                    </entry>
+                </properties>
+                <schedulingPeriod>0 sec</schedulingPeriod>
+                <schedulingStrategy>TIMER_DRIVEN</schedulingStrategy>
+                <penaltyDuration>30 sec</penaltyDuration>
+                <yieldDuration>1 sec</yieldDuration>
+            </config>
+            <name>EvaluateJsonPath_Extractor</name>
+            <type>org.apache.nifi.processors.standard.EvaluateJsonPath</type>
+            <relationships>
+                <autoTerminate>true</autoTerminate>
+                <name>failure</name>
+            </relationships>
+            <relationships>
+                <autoTerminate>true</autoTerminate>
+                <name>unmatched</name>
+            </relationships>
+        </processors>
+
+        <!-- 3. PROCESSOR: UpdateAttribute (Advanced Rules) -->
+        <processors>
+            <id>c3000000-0000-0000-0000-000000000000</id>
+            <parentGroupId>d6387a32-018f-1000-0000-0000305f63d6</parentGroupId>
+            <position>
+                <x>0.0</x>
+                <y>400.0</y>
+            </position>
+            <bundle>
+                <artifact>nifi-update-attribute-nar</artifact>
+                <group>org.apache.nifi</group>
+                <version>1.19.1</version>
+            </bundle>
+            <class>org.apache.nifi.processors.attributes.UpdateAttribute</class>
+            <config>
+                <bulletinLevel>WARN</bulletinLevel>
+                <comments>Classificazione Clinica degli Alert</comments>
+                <concurrentlySchedulableTaskCount>1</concurrentlySchedulableTaskCount>
+                <descriptors>
+                    <entry>
+                        <key>Delete Attributes Expression</key>
+                        <value>
+                            <name>Delete Attributes Expression</name>
+                        </value>
+                    </entry>
+                </descriptors>
+                <!-- Regola di classificazione tramite espressione di default nel caso le regole condizionali non scattino -->
+                <properties>
+                    <entry>
+                        <key>alert_status</key>
+                        <value>${heart_rate:toNumber():lt(50):ifElse('low_alert', ${heart_rate:toNumber():ge(110):and(${activity:equals('rest')}):ifElse('critical_alert', ${heart_rate:toNumber():ge(110):and(${activity:equals('rest'):not()}):ifElse('high_alert', 'normal')})})}</value>
+                    </entry>
+                </properties>
+                <schedulingPeriod>0 sec</schedulingPeriod>
+                <schedulingStrategy>TIMER_DRIVEN</schedulingStrategy>
+                <penaltyDuration>30 sec</penaltyDuration>
+                <yieldDuration>1 sec</yieldDuration>
+            </config>
+            <name>UpdateAttribute_Classifier</name>
+            <type>org.apache.nifi.processors.attributes.UpdateAttribute</type>
+        </processors>
+
+        <!-- 4. PROCESSOR: RouteOnAttribute -->
+        <processors>
+            <id>c4000000-0000-0000-0000-000000000000</id>
+            <parentGroupId>d6387a32-018f-1000-0000-0000305f63d6</parentGroupId>
+            <position>
+                <x>0.0</x>
+                <y>600.0</y>
+            </position>
+            <bundle>
+                <artifact>nifi-standard-nar</artifact>
+                <group>org.apache.nifi</group>
+                <version>1.19.1</version>
+            </bundle>
+            <class>org.apache.nifi.processors.standard.RouteOnAttribute</class>
+            <config>
+                <bulletinLevel>WARN</bulletinLevel>
+                <comments>Routing per Logging e Iniezione</comments>
+                <concurrentlySchedulableTaskCount>1</concurrentlySchedulableTaskCount>
+                <descriptors>
+                    <entry>
+                        <key>Routing Strategy</key>
+                        <value>
+                            <name>Routing Strategy</name>
+                        </value>
+                    </entry>
+                    <entry>
+                        <key>alert</key>
+                        <value>
+                            <name>alert</name>
+                        </value>
+                    </entry>
+                    <entry>
+                        <key>normal</key>
+                        <value>
+                            <name>normal</name>
+                        </value>
+                    </entry>
+                </descriptors>
+                <properties>
+                    <entry>
+                        <key>Routing Strategy</key>
+                        <value>Route to Property name</value>
+                    </entry>
+                    <entry>
+                        <key>alert</key>
+                        <value>${alert_status:equals('normal'):not()}</value>
+                    </entry>
+                    <entry>
+                        <key>normal</key>
+                        <value>${alert_status:equals('normal')}</value>
+                    </entry>
+                </properties>
+                <schedulingPeriod>0 sec</schedulingPeriod>
+                <schedulingStrategy>TIMER_DRIVEN</schedulingStrategy>
+                <penaltyDuration>30 sec</penaltyDuration>
+                <yieldDuration>1 sec</yieldDuration>
+            </config>
+            <name>RouteOnAttribute_DemoLogger</name>
+            <type>org.apache.nifi.processors.standard.RouteOnAttribute</type>
+            <relationships>
+                <autoTerminate>true</autoTerminate>
+                <name>unmatched</name>
+            </relationships>
+        </processors>
+
+        <!-- 5. PROCESSOR: LogMessage -->
+        <processors>
+            <id>c5000000-0000-0000-0000-000000000000</id>
+            <parentGroupId>d6387a32-018f-1000-0000-0000305f63d6</parentGroupId>
+            <position>
+                <x>-250.0</x>
+                <y>800.0</y>
+            </position>
+            <bundle>
+                <artifact>nifi-standard-nar</artifact>
+                <group>org.apache.nifi</group>
+                <version>1.19.1</version>
+            </bundle>
+            <class>org.apache.nifi.processors.standard.LogMessage</class>
+            <config>
+                <bulletinLevel>WARN</bulletinLevel>
+                <comments>Log console per Demo</comments>
+                <concurrentlySchedulableTaskCount>1</concurrentlySchedulableTaskCount>
+                <descriptors>
+                    <entry>
+                        <key>log-level</key>
+                        <value>
+                            <name>log-level</name>
+                        </value>
+                    </entry>
+                    <entry>
+                        <key>log-message</key>
+                        <value>
+                            <name>log-message</name>
+                        </value>
+                    </entry>
+                </descriptors>
+                <properties>
+                    <entry>
+                        <key>log-level</key>
+                        <value>warn</value>
+                    </entry>
+                    <entry>
+                        <key>log-message</key>
+                        <value>[DEMO ALERT] Paziente: ${patient_id} | Battito: ${heart_rate} | Stato: ${alert_status} | Attività: ${activity}</value>
+                    </entry>
+                </properties>
+                <schedulingPeriod>0 sec</schedulingPeriod>
+                <schedulingStrategy>TIMER_DRIVEN</schedulingStrategy>
+                <penaltyDuration>30 sec</penaltyDuration>
+                <yieldDuration>1 sec</yieldDuration>
+            </config>
+            <name>LogMessage_AlertWriter</name>
+            <type>org.apache.nifi.processors.standard.LogMessage</type>
+        </processors>
+
+        <!-- 6. PROCESSOR: JoltTransformJSON -->
+        <processors>
+            <id>c6000000-0000-0000-0000-000000000000</id>
+            <parentGroupId>d6387a32-018f-1000-0000-0000305f63d6</parentGroupId>
+            <position>
+                <x>250.0</x>
+                <y>800.0</y>
+            </position>
+            <bundle>
+                <artifact>nifi-standard-nar</artifact>
+                <group>org.apache.nifi</group>
+                <version>1.19.1</version>
+            </bundle>
+            <class>org.apache.nifi.processors.standard.JoltTransformJSON</class>
+            <config>
+                <bulletinLevel>WARN</bulletinLevel>
+                <comments>Iniezione alert_type nel JSON</comments>
+                <concurrentlySchedulableTaskCount>1</concurrentlySchedulableTaskCount>
+                <descriptors>
+                    <entry>
+                        <key>jolt-transform</key>
+                        <value>
+                            <name>jolt-transform</name>
+                        </value>
+                    </entry>
+                    <entry>
+                        <key>jolt-spec</key>
+                        <value>
+                            <name>jolt-spec</name>
+                        </value>
+                    </entry>
+                </descriptors>
+                <properties>
+                    <entry>
+                        <key>jolt-transform</key>
+                        <value>jolt-transform-chain</value>
+                    </entry>
+                    <entry>
+                        <key>jolt-spec</key>
+                        <value>[{"operation":"default","spec":{"alert_type":"${alert_status}"}}]</value>
+                    </entry>
+                </properties>
+                <schedulingPeriod>0 sec</schedulingPeriod>
+                <schedulingStrategy>TIMER_DRIVEN</schedulingStrategy>
+                <penaltyDuration>30 sec</penaltyDuration>
+                <yieldDuration>1 sec</yieldDuration>
+            </config>
+            <name>JoltTransformJSON_Enricher</name>
+            <type>org.apache.nifi.processors.standard.JoltTransformJSON</type>
+            <relationships>
+                <autoTerminate>true</autoTerminate>
+                <name>failure</name>
+            </relationships>
+        </processors>
+
+        <!-- 7. PROCESSOR: MergeContent -->
+        <processors>
+            <id>c7000000-0000-0000-0000-000000000000</id>
+            <parentGroupId>d6387a32-018f-1000-0000-0000305f63d6</parentGroupId>
+            <position>
+                <x>250.0</x>
+                <y>1000.0</y>
+            </position>
+            <bundle>
+                <artifact>nifi-standard-nar</artifact>
+                <group>org.apache.nifi</group>
+                <version>1.19.1</version>
+            </bundle>
+            <class>org.apache.nifi.processors.standard.MergeContent</class>
+            <config>
+                <bulletinLevel>WARN</bulletinLevel>
+                <comments>Batching in NDJSON (Mitigazione Small Files)</comments>
+                <concurrentlySchedulableTaskCount>1</concurrentlySchedulableTaskCount>
+                <descriptors>
+                    <entry>
+                        <key>Merge Strategy</key>
+                        <value>
+                            <name>Merge Strategy</name>
+                        </value>
+                    </entry>
+                    <entry>
+                        <key>Merge Format</key>
+                        <value>
+                            <name>Merge Format</name>
+                        </value>
+                    </entry>
+                    <entry>
+                        <key>Delimiter Strategy</key>
+                        <value>
+                            <name>Delimiter Strategy</name>
+                        </value>
+                    </entry>
+                    <entry>
+                        <key>Demarcator File</key>
+                        <value>
+                            <name>Demarcator File</name>
+                        </value>
+                    </entry>
+                    <entry>
+                        <key>Minimum Group Size</key>
+                        <value>
+                            <name>Minimum Group Size</name>
+                        </value>
+                    </entry>
+                    <entry>
+                        <key>Max Bin Age</key>
+                        <value>
+                            <name>Max Bin Age</name>
+                        </value>
+                    </entry>
+                </descriptors>
+                <properties>
+                    <entry>
+                        <key>Merge Strategy</key>
+                        <value>Bin-Packing Algorithm</value>
+                    </entry>
+                    <entry>
+                        <key>Merge Format</key>
+                        <value>Binary Concatenation</value>
+                    </entry>
+                    <entry>
+                        <key>Delimiter Strategy</key>
+                        <value>Text</value>
+                    </entry>
+                    <!-- Inserisce un carattere a capo (newline) per separare i JSON righe per riga -->
+                    <entry>
+                        <key>Demarcator File</key>
+                        <value>
+</value>
+                    </entry>
+                    <entry>
+                        <key>Minimum Group Size</key>
+                        <value>0 B</value>
+                    </entry>
+                    <entry>
+                        <key>Max Bin Age</key>
+                        <value>10 sec</value>
+                    </entry>
+                </properties>
+                <schedulingPeriod>0 sec</schedulingPeriod>
+                <schedulingStrategy>TIMER_DRIVEN</schedulingStrategy>
+                <penaltyDuration>30 sec</penaltyDuration>
+                <yieldDuration>1 sec</yieldDuration>
+            </config>
+            <name>MergeContent_Batcher</name>
+            <type>org.apache.nifi.processors.standard.MergeContent</type>
+            <relationships>
+                <autoTerminate>true</autoTerminate>
+                <name>failure</name>
+            </relationships>
+            <relationships>
+                <autoTerminate>true</autoTerminate>
+                <name>original</name>
+            </relationships>
+        </processors>
+
+        <!-- 8. PROCESSOR: PutHDFS -->
+        <processors>
+            <id>c8000000-0000-0000-0000-000000000000</id>
+            <parentGroupId>d6387a32-018f-1000-0000-0000305f63d6</parentGroupId>
+            <position>
+                <x>250.0</x>
+                <y>1200.0</y>
+            </position>
+            <bundle>
+                <artifact>nifi-hadoop-nar</artifact>
+                <group>org.apache.nifi</group>
+                <version>1.19.1</version>
+            </bundle>
+            <class>org.apache.nifi.processors.hadoop.PutHDFS</class>
+            <config>
+                <bulletinLevel>WARN</bulletinLevel>
+                <comments>Scrittura HDFS aggregata</comments>
+                <concurrentlySchedulableTaskCount>1</concurrentlySchedulableTaskCount>
+                <descriptors>
+                    <entry>
+                        <key>Hadoop Configuration Resources</key>
+                        <value>
+                            <name>Hadoop Configuration Resources</name>
+                        </value>
+                    </entry>
+                    <entry>
+                        <key>Directory</key>
+                        <value>
+                            <name>Directory</name>
+                        </value>
+                    </entry>
+                    <entry>
+                        <key>Conflict Resolution Strategy</key>
+                        <value>
+                            <name>Conflict Resolution Strategy</name>
+                        </value>
+                    </entry>
+                </descriptors>
+                <properties>
+                    <entry>
+                        <key>Hadoop Configuration Resources</key>
+                        <value>/etc/hadoop/conf/core-site.xml,/etc/hadoop/conf/hdfs-site.xml</value>
+                    </entry>
+                    <entry>
+                        <key>Directory</key>
+                        <value>/user/enricomadonna0/nifi-demo/output</value>
+                    </entry>
+                    <entry>
+                        <key>Conflict Resolution Strategy</key>
+                        <value>fail</value>
+                    </entry>
+                </properties>
+                <schedulingPeriod>0 sec</schedulingPeriod>
+                <schedulingStrategy>TIMER_DRIVEN</schedulingStrategy>
+                <penaltyDuration>30 sec</penaltyDuration>
+                <yieldDuration>1 sec</yieldDuration>
+            </config>
+            <name>PutHDFS_Writer</name>
+            <type>org.apache.nifi.processors.hadoop.PutHDFS</type>
+            <relationships>
+                <autoTerminate>true</autoTerminate>
+                <name>success</name>
+            </relationships>
+            <relationships>
+                <autoTerminate>true</autoTerminate>
+                <name>failure</name>
+            </relationships>
+        </processors>
+
+        <!-- CONNECTIONS -->
+
+        <!-- ListenHTTP -> EvaluateJsonPath -->
+        <connections>
+            <id>c1200000-0000-0000-0000-000000000000</id>
+            <parentGroupId>d6387a32-018f-1000-0000-0000305f63d6</parentGroupId>
+            <backPressureDataSizeThreshold>1 GB</backPressureDataSizeThreshold>
+            <backPressureObjectThreshold>10000</backPressureObjectThreshold>
+            <flowFileExpiration>0 sec</flowFileExpiration>
+            <labelIndex>0</labelIndex>
+            <loadBalanceCompression>DO_NOT_COMPRESS</loadBalanceCompression>
+            <loadBalancePartitionAttribute></loadBalancePartitionAttribute>
+            <loadBalanceStatus>LOAD_BALANCE_NOT_CONFIGURED</loadBalanceStatus>
+            <loadBalanceStrategy>DO_NOT_LOAD_BALANCE</loadBalanceStrategy>
+            <zIndex>0</zIndex>
+            <source>
+                <groupId>d6387a32-018f-1000-0000-0000305f63d6</groupId>
+                <id>c1000000-0000-0000-0000-000000000000</id>
+                <type>PROCESSOR</type>
+            </source>
+            <destination>
+                <groupId>d6387a32-018f-1000-0000-0000305f63d6</groupId>
+                <id>c2000000-0000-0000-0000-000000000000</id>
+                <type>PROCESSOR</type>
+            </destination>
+            <selectedRelationships>success</selectedRelationships>
+            <name>success</name>
+        </connections>
+
+        <!-- EvaluateJsonPath -> UpdateAttribute -->
+        <connections>
+            <id>c2300000-0000-0000-0000-000000000000</id>
+            <parentGroupId>d6387a32-018f-1000-0000-0000305f63d6</parentGroupId>
+            <backPressureDataSizeThreshold>1 GB</backPressureDataSizeThreshold>
+            <backPressureObjectThreshold>10000</backPressureObjectThreshold>
+            <flowFileExpiration>0 sec</flowFileExpiration>
+            <labelIndex>0</labelIndex>
+            <loadBalanceCompression>DO_NOT_COMPRESS</loadBalanceCompression>
+            <loadBalancePartitionAttribute></loadBalancePartitionAttribute>
+            <loadBalanceStatus>LOAD_BALANCE_NOT_CONFIGURED</loadBalanceStatus>
+            <loadBalanceStrategy>DO_NOT_LOAD_BALANCE</loadBalanceStrategy>
+            <zIndex>0</zIndex>
+            <source>
+                <groupId>d6387a32-018f-1000-0000-0000305f63d6</groupId>
+                <id>c2000000-0000-0000-0000-000000000000</id>
+                <type>PROCESSOR</type>
+            </source>
+            <destination>
+                <groupId>d6387a32-018f-1000-0000-0000305f63d6</groupId>
+                <id>c3000000-0000-0000-0000-000000000000</id>
+                <type>PROCESSOR</type>
+            </destination>
+            <selectedRelationships>matched</selectedRelationships>
+            <name>matched</name>
+        </connections>
+
+        <!-- UpdateAttribute -> RouteOnAttribute -->
+        <connections>
+            <id>c3400000-0000-0000-0000-000000000000</id>
+            <parentGroupId>d6387a32-018f-1000-0000-0000305f63d6</parentGroupId>
+            <backPressureDataSizeThreshold>1 GB</backPressureDataSizeThreshold>
+            <backPressureObjectThreshold>10000</backPressureObjectThreshold>
+            <flowFileExpiration>0 sec</flowFileExpiration>
+            <labelIndex>0</labelIndex>
+            <loadBalanceCompression>DO_NOT_COMPRESS</loadBalanceCompression>
+            <loadBalancePartitionAttribute></loadBalancePartitionAttribute>
+            <loadBalanceStatus>LOAD_BALANCE_NOT_CONFIGURED</loadBalanceStatus>
+            <loadBalanceStrategy>DO_NOT_LOAD_BALANCE</loadBalanceStrategy>
+            <zIndex>0</zIndex>
+            <source>
+                <groupId>d6387a32-018f-1000-0000-0000305f63d6</groupId>
+                <id>c3000000-0000-0000-0000-000000000000</id>
+                <type>PROCESSOR</type>
+            </source>
+            <destination>
+                <groupId>d6387a32-018f-1000-0000-0000305f63d6</groupId>
+                <id>c4000000-0000-0000-0000-000000000000</id>
+                <type>PROCESSOR</type>
+            </destination>
+            <selectedRelationships>success</selectedRelationships>
+            <name>success</name>
+        </connections>
+
+        <!-- RouteOnAttribute -> LogMessage -->
+        <connections>
+            <id>c4500000-0000-0000-0000-000000000000</id>
+            <parentGroupId>d6387a32-018f-1000-0000-0000305f63d6</parentGroupId>
+            <backPressureDataSizeThreshold>1 GB</backPressureDataSizeThreshold>
+            <backPressureObjectThreshold>10000</backPressureObjectThreshold>
+            <flowFileExpiration>0 sec</flowFileExpiration>
+            <labelIndex>0</labelIndex>
+            <loadBalanceCompression>DO_NOT_COMPRESS</loadBalanceCompression>
+            <loadBalancePartitionAttribute></loadBalancePartitionAttribute>
+            <loadBalanceStatus>LOAD_BALANCE_NOT_CONFIGURED</loadBalanceStatus>
+            <loadBalanceStrategy>DO_NOT_LOAD_BALANCE</loadBalanceStrategy>
+            <zIndex>0</zIndex>
+            <source>
+                <groupId>d6387a32-018f-1000-0000-0000305f63d6</groupId>
+                <id>c4000000-0000-0000-0000-000000000000</id>
+                <type>PROCESSOR</type>
+            </source>
+            <destination>
+                <groupId>d6387a32-018f-1000-0000-0000305f63d6</groupId>
+                <id>c5000000-0000-0000-0000-000000000000</id>
+                <type>PROCESSOR</type>
+            </destination>
+            <selectedRelationships>alert</selectedRelationships>
+            <name>alert</name>
+        </connections>
+
+        <!-- RouteOnAttribute -> JoltTransformJSON -->
+        <connections>
+            <id>c4600000-0000-0000-0000-000000000000</id>
+            <parentGroupId>d6387a32-018f-1000-0000-0000305f63d6</parentGroupId>
+            <backPressureDataSizeThreshold>1 GB</backPressureDataSizeThreshold>
+            <backPressureObjectThreshold>10000</backPressureObjectThreshold>
+            <flowFileExpiration>0 sec</flowFileExpiration>
+            <labelIndex>0</labelIndex>
+            <loadBalanceCompression>DO_NOT_COMPRESS</loadBalanceCompression>
+            <loadBalancePartitionAttribute></loadBalancePartitionAttribute>
+            <loadBalanceStatus>LOAD_BALANCE_NOT_CONFIGURED</loadBalanceStatus>
+            <loadBalanceStrategy>DO_NOT_LOAD_BALANCE</loadBalanceStrategy>
+            <zIndex>0</zIndex>
+            <source>
+                <groupId>d6387a32-018f-1000-0000-0000305f63d6</groupId>
+                <id>c4000000-0000-0000-0000-000000000000</id>
+                <type>PROCESSOR</type>
+            </source>
+            <destination>
+                <groupId>d6387a32-018f-1000-0000-0000305f63d6</groupId>
+                <id>c6000000-0000-0000-0000-000000000000</id>
+                <type>PROCESSOR</type>
+            </destination>
+            <selectedRelationships>normal</selectedRelationships>
+            <name>normal</name>
+        </connections>
+
+        <!-- LogMessage -> JoltTransformJSON -->
+        <connections>
+            <id>c5600000-0000-0000-0000-000000000000</id>
+            <parentGroupId>d6387a32-018f-1000-0000-0000305f63d6</parentGroupId>
+            <backPressureDataSizeThreshold>1 GB</backPressureDataSizeThreshold>
+            <backPressureObjectThreshold>10000</backPressureObjectThreshold>
+            <flowFileExpiration>0 sec</flowFileExpiration>
+            <labelIndex>0</labelIndex>
+            <loadBalanceCompression>DO_NOT_COMPRESS</loadBalanceCompression>
+            <loadBalancePartitionAttribute></loadBalancePartitionAttribute>
+            <loadBalanceStatus>LOAD_BALANCE_NOT_CONFIGURED</loadBalanceStatus>
+            <loadBalanceStrategy>DO_NOT_LOAD_BALANCE</loadBalanceStrategy>
+            <zIndex>0</zIndex>
+            <source>
+                <groupId>d6387a32-018f-1000-0000-0000305f63d6</groupId>
+                <id>c5000000-0000-0000-0000-000000000000</id>
+                <type>PROCESSOR</type>
+            </source>
+            <destination>
+                <groupId>d6387a32-018f-1000-0000-0000305f63d6</groupId>
+                <id>c6000000-0000-0000-0000-000000000000</id>
+                <type>PROCESSOR</type>
+            </destination>
+            <selectedRelationships>success</selectedRelationships>
+            <name>success</name>
+        </connections>
+
+        <!-- JoltTransformJSON -> MergeContent -->
+        <connections>
+            <id>c6700000-0000-0000-0000-000000000000</id>
+            <parentGroupId>d6387a32-018f-1000-0000-0000305f63d6</parentGroupId>
+            <backPressureDataSizeThreshold>1 GB</backPressureDataSizeThreshold>
+            <backPressureObjectThreshold>10000</backPressureObjectThreshold>
+            <flowFileExpiration>0 sec</flowFileExpiration>
+            <labelIndex>0</labelIndex>
+            <loadBalanceCompression>DO_NOT_COMPRESS</loadBalanceCompression>
+            <loadBalancePartitionAttribute></loadBalancePartitionAttribute>
+            <loadBalanceStatus>LOAD_BALANCE_NOT_CONFIGURED</loadBalanceStatus>
+            <loadBalanceStrategy>DO_NOT_LOAD_BALANCE</loadBalanceStrategy>
+            <zIndex>0</zIndex>
+            <source>
+                <groupId>d6387a32-018f-1000-0000-0000305f63d6</groupId>
+                <id>c6000000-0000-0000-0000-000000000000</id>
+                <type>PROCESSOR</type>
+            </source>
+            <destination>
+                <groupId>d6387a32-018f-1000-0000-0000305f63d6</groupId>
+                <id>c7000000-0000-0000-0000-000000000000</id>
+                <type>PROCESSOR</type>
+            </destination>
+            <selectedRelationships>success</selectedRelationships>
+            <name>success</name>
+        </connections>
+
+        <!-- MergeContent -> PutHDFS -->
+        <connections>
+            <id>c7800000-0000-0000-0000-000000000000</id>
+            <parentGroupId>d6387a32-018f-1000-0000-0000305f63d6</parentGroupId>
+            <backPressureDataSizeThreshold>1 GB</backPressureDataSizeThreshold>
+            <backPressureObjectThreshold>10000</backPressureObjectThreshold>
+            <flowFileExpiration>0 sec</flowFileExpiration>
+            <labelIndex>0</labelIndex>
+            <loadBalanceCompression>DO_NOT_COMPRESS</loadBalanceCompression>
+            <loadBalancePartitionAttribute></loadBalancePartitionAttribute>
+            <loadBalanceStatus>LOAD_BALANCE_NOT_CONFIGURED</loadBalanceStatus>
+            <loadBalanceStrategy>DO_NOT_LOAD_BALANCE</loadBalanceStrategy>
+            <zIndex>0</zIndex>
+            <source>
+                <groupId>d6387a32-018f-1000-0000-0000305f63d6</groupId>
+                <id>c7000000-0000-0000-0000-000000000000</id>
+                <type>PROCESSOR</type>
+            </source>
+            <destination>
+                <groupId>d6387a32-018f-1000-0000-0000305f63d6</groupId>
+                <id>c8000000-0000-0000-0000-000000000000</id>
+                <type>PROCESSOR</type>
+            </destination>
+            <selectedRelationships>merged</selectedRelationships>
+            <name>merged</name>
+        </connections>
+    </snippet>
+</template>

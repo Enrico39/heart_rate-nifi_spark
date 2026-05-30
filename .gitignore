@@ -1,0 +1,10 @@
+# Ignore large NiFi bin zip
+nifi-1.19.1-bin.zip
+*.zip
+
+# Ignore local NiFi installation if present
+nifi/
+
+# OS metadata files
+.DS_Store
+Thumbs.db
