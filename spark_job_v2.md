@@ -10,7 +10,7 @@ La strategia scelta per l'analitica real-time è **Spark Structured Streaming** 
 
 * **Modello di Ingestione**: Directory Streaming. Spark monitora costantemente la cartella HDFS `/user/enricomadonna0/nifi-demo/output/` alla ricerca di nuovi file in formato Newline-Delimited JSON (NDJSON) depositati da Apache NiFi.
 * **Ottimizzazione Risorse**: Il job viene avviato in modalità Client limitando rigorosamente l'allocazione a **1 solo esecutore con 1 core** per prevenire la starvation delle risorse su YARN.
-* **Output Mode**: `update`. Vengono emesse in console le sole righe relative ai pazienti per cui sono pervenuti nuovi dati nell'ultimo trigger temporale (impostato a 5 secondi), minimizzando l'overhead di I/O dello schermo.
+* **Output Mode**: `update`. Vengono emesse in console le sole righe relative ai pazienti per cui sono pervenuti nuovi dati nell'ultimo trigger temporale (impostato a 15 secondi), minimizzando l'overhead di I/O dello schermo.
 
 ---
 
@@ -52,7 +52,7 @@ La pipeline di calcolo del job esegue i seguenti passaggi:
 [Aggregated DataFrame (window, average, min, max, HRV, alert counts)]
        |
        v  (writeStream in OutputMode update)
-[Console Out (Micro-Batch triggers ogni 5 secondi)]
+[Console Out (Micro-Batch triggers ogni 15 secondi)]
 ```
 
 1. **Lettura Continua**: Carica i file NDJSON come flusso di dati non strutturato tramite `.readStream` sulla directory `/user/enricomadonna0/nifi-demo/output`.
@@ -167,7 +167,7 @@ def main():
     query = patient_metrics.writeStream \
         .outputMode("update") \
         .format("console") \
-        .trigger(processingTime="5 seconds") \
+        .trigger(processingTime="15 seconds") \
         .option("checkpointLocation", "/user/enricomadonna0/nifi-demo/checkpoint") \
         .start()
 

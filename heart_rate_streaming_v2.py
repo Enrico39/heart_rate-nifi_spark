@@ -98,7 +98,7 @@ def main():
     query = patient_metrics.writeStream \
         .outputMode("update") \
         .format("console") \
-        .trigger(processingTime="5 seconds") \
+        .trigger(processingTime="15 seconds") \
         .option("checkpointLocation", "/user/enricomadonna0/nifi-demo/checkpoint") \
         .start()
 
