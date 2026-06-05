@@ -71,8 +71,8 @@ def main():
             min("heart_rate").alias("min_heart_rate"),
             max("heart_rate").alias("max_heart_rate"),
             count("patient_id").alias("total_readings"),
-            # Calcolo della deviazione standard del battito cardiaco come proxy dell'HRV (Heart Rate Variability)
-            stddev_samp("heart_rate").alias("hrv_sdhr"),
+            # Deviazione Standard della frequenza cardiaca (SDHR) per monitorare la stabilità macro del battito
+            stddev_samp("heart_rate").alias("sdhr"),
             # Conteggi condizionali degli allarmi basati sul campo 'alert_type' arricchito da NiFi
             count(when(col("alert_type") == "low_alert", 1)).alias("low_alerts"),
             count(when(col("alert_type") == "high_alert", 1)).alias("high_alerts"),
@@ -86,7 +86,7 @@ def main():
             col("min_heart_rate"),
             col("max_heart_rate"),
             col("total_readings"),
-            col("hrv_sdhr"),
+            col("sdhr"),
             col("low_alerts"),
             col("high_alerts"),
             col("critical_alerts")

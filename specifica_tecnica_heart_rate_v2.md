@@ -204,7 +204,7 @@ Tutti i file confluiscono in un'unica directory radice:
 
 ## 5. Spark Job v2
 
-Il job Spark v2 è concepito per leggere lo stream di file NDJSON da HDFS in modo continuo ed estremamente robusto, applicando finestre temporali scorrevoli con watermark e calcolando la variabilità del battito (HRV). Rileva il campo `alert_type` direttamente dal JSON.
+Il job Spark v2 è concepito per leggere lo stream di file NDJSON da HDFS in modo continuo ed estremamente robusto, applicando finestre temporali scorrevoli con watermark e calcolando la deviazione standard del battito (SDHR) come indicatore di stabilità cardiaca. Rileva il campo `alert_type` direttamente dal JSON.
 
 ### 5.1 Codice Spark (`heart_rate_streaming_v2.py`)
 
@@ -257,8 +257,8 @@ def main():
             min("heart_rate").alias("min_heart_rate"),
             max("heart_rate").alias("max_heart_rate"),
             count("patient_id").alias("total_readings"),
-            # Deviazione standard del battito cardiaco come proxy dell'HRV
-            stddev_samp("heart_rate").alias("hrv_sdhr"),
+            # Deviazione Standard della frequenza cardiaca (SDHR) per monitorare la stabilità macro del battito
+            stddev_samp("heart_rate").alias("sdhr"),
             # Conteggi condizionali basati sul campo esplicito alert_type
             count(when(col("alert_type") == "low_alert", 1)).alias("low_alerts"),
             count(when(col("alert_type") == "high_alert", 1)).alias("high_alerts"),
@@ -272,7 +272,7 @@ def main():
             col("min_heart_rate"),
             col("max_heart_rate"),
             col("total_readings"),
-            col("hrv_sdhr"),
+            col("sdhr"),
             col("low_alerts"),
             col("high_alerts"),
             col("critical_alerts")
@@ -345,7 +345,7 @@ Una sequenza lineare e priva di intoppi da eseguire sul cluster Dataproc.
   Batch: 1
   -------------------------------------------
   +-------------------+-------------------+----------+------------------+--------------+--------------+--------------+------------------+----------+-----------+---------------+
-  |       window_start|         window_end|patient_id|average_heart_rate|min_heart_rate|max_heart_rate|total_readings|          hrv_sdhr|low_alerts|high_alerts|critical_alerts|
+  |       window_start|         window_end|patient_id|average_heart_rate|min_heart_rate|max_heart_rate|total_readings|              sdhr|low_alerts|high_alerts|critical_alerts|
   +-------------------+-------------------+----------+------------------+--------------+--------------+--------------+------------------+----------+-----------+---------------+
   |2026-05-29 09:56:00|2026-05-29 10:01:00|      p001|              93.3|            72|           130|             3| 29.58597640775101|         0|          0|              1|
   |2026-05-29 09:56:00|2026-05-29 10:01:00|      p002|              46.5|            45|            48|             2| 2.121320343559642|         2|          0|              0|

@@ -49,7 +49,7 @@ La pipeline di calcolo del job esegue i seguenti passaggi:
 [Processed DataFrame (timestamp -> TimestampType)]
        |
        v  (withWatermark & groupBy window, patient_id)
-[Aggregated DataFrame (window, average, min, max, HRV, alert counts)]
+[Aggregated DataFrame (window, average, min, max, SDHR, alert counts)]
        |
        v  (writeStream in OutputMode update)
 [Console Out (Micro-Batch triggers ogni 15 secondi)]
@@ -59,7 +59,7 @@ La pipeline di calcolo del job esegue i seguenti passaggi:
 2. **Validazione dello Schema**: Mappa i dati in ingresso sullo schema statico definito.
 3. **Conversione Temporale**: Converte il campo stringa `timestamp` in un tipo temporale nativo (`TimestampType`) di Spark usando la funzione `.cast("timestamp")`. La colonna risultante `event_time` viene usata per abilitare finestre temporali e watermarking.
 4. **Watermarking & Windowing**: Applica un watermark di 10 minuti per consentire la gestione di eventi tardivi ed evitare la crescita incontrollata dello stato in memoria. I dati vengono raggruppati in finestre scorrevoli di 5 minuti, con uno scorrimento di 10 secondi.
-5. **Calcolo Metriche**: Raggruppa i record per finestra e per paziente, calcolando la media, il minimo, il massimo, il conteggio degli alert e la variabilità della frequenza cardiaca (HRV) stimata tramite deviazione standard.
+5. **Calcolo Metriche**: Raggruppa i record per finestra e per paziente, calcolando la media, il minimo, il massimo, il conteggio degli alert e la deviazione standard della frequenza cardiaca (SDHR) per analizzare la volatilità macro del battito.
 6. **Appiattimento del Window Struct**: Seleziona ed estrae `window.start` e `window.end` come stringhe (`window_start`, `window_end`) per una visualizzazione pulita in console.
 7. **Invio al Console Sink**: Scrive i risultati intermedi dell'aggregazione su stdout.
 
@@ -77,10 +77,16 @@ Il job effettua aggregazioni su finestre scorrevoli di 5 minuti per ciascun `pat
 | **Minimo Battito** | `min("heart_rate")` | Registra il valore di bpm più basso rilevato all'interno della finestra. |
 | **Massimo Battito** | `max("heart_rate")` | Registra il valore di bpm più alto rilevato all'interno della finestra. |
 | **Letture Totali** | `count("patient_id")` | Numero totale di campionamenti inviati dal dispositivo nella finestra. |
-| **Heart Rate Variability (HRV)** | `stddev_samp("heart_rate")` | Deviazione standard campionaria (SDHR) che funge da proxy per l'HRV. |
+| **Standard Deviation of HR (SDHR)** | `stddev_samp("heart_rate")` | Deviazione standard campionaria (SDHR) utilizzata come proxy macroscopico per misurare la volatilità e la stabilità del battito del paziente. |
 | **Low Alerts** | `count(when(col("alert_type") == "low_alert", 1))` | Conteggio di eventi con frequenza cardiaca inferiore a 50 bpm nella finestra. |
 | **High Alerts** | `count(when(col("alert_type") == "high_alert", 1))` | Conteggio di eventi tachicardici compatibili con attività fisica. |
 | **Critical Alerts** | `count(when(col("alert_type") == "critical_alert", 1))` | Conteggio di eventi tachicardici rilevati a riposo (critici) nella finestra. |
+
+> [!WARNING]
+> **Distinzione Clinica Cruciale: SDHR vs HRV**
+> - La vera **HRV (Heart Rate Variability)** fisiologica misura le micro-variazioni in millisecondi tra battiti consecutivi (i cosiddetti intervalli R-R o N-N) calcolati da segnali elettrocardiografici (ECG) o fotopletismografici (PPG) grezzi ad altissima risoluzione temporale (es. SDNN o RMSSD).
+> - In questa demo (e nella maggior parte dei sistemi IoMT di monitoraggio remoto consumer), i wearable trasmettono dati già aggregati sotto forma di frequenza cardiaca istantanea in BPM (es. 72 bpm, 75 bpm) a intervalli regolari. Non disponendo degli intervalli R-R millisecondo per millisecondo, **non stiamo calcolando una HRV clinica**.
+> - Per ragioni di rigore scientifico ed espositivo, la metrica viene chiamata **SDHR (Standard Deviation of Heart Rate)** e rappresenta la **volatilità macroscopica** o stabilità temporale del battito del paziente nella finestra scorrevole. Funziona come un indicatore di instabilità cardiaca (se elevata a riposo) ma non va confusa con la vera HRV beat-to-beat.
 
 ---
 
@@ -142,8 +148,8 @@ def main():
             min("heart_rate").alias("min_heart_rate"),
             max("heart_rate").alias("max_heart_rate"),
             count("patient_id").alias("total_readings"),
-            # Deviazione standard del battito cardiaco come proxy dell'HRV
-            stddev_samp("heart_rate").alias("hrv_sdhr"),
+            # Deviazione Standard della frequenza cardiaca (SDHR) per monitorare la stabilità macro del battito
+            stddev_samp("heart_rate").alias("sdhr"),
             # Conteggi condizionali basati sul campo esplicito alert_type
             count(when(col("alert_type") == "low_alert", 1)).alias("low_alerts"),
             count(when(col("alert_type") == "high_alert", 1)).alias("high_alerts"),
@@ -157,7 +163,7 @@ def main():
             col("min_heart_rate"),
             col("max_heart_rate"),
             col("total_readings"),
-            col("hrv_sdhr"),
+            col("sdhr"),
             col("low_alerts"),
             col("high_alerts"),
             col("critical_alerts")
@@ -211,7 +217,7 @@ All'avvio, il job attende i file da HDFS. Quando il simulatore invia il batch di
 Batch: 1
 -------------------------------------------
 +-------------------+-------------------+----------+------------------+--------------+--------------+--------------+------------------+----------+-----------+---------------+
-|       window_start|         window_end|patient_id|average_heart_rate|min_heart_rate|max_heart_rate|total_readings|          hrv_sdhr|low_alerts|high_alerts|critical_alerts|
+|       window_start|         window_end|patient_id|average_heart_rate|min_heart_rate|max_heart_rate|total_readings|              sdhr|low_alerts|high_alerts|critical_alerts|
 +-------------------+-------------------+----------+------------------+--------------+--------------+--------------+------------------+----------+-----------+---------------+
 |2026-05-29 09:56:00|2026-05-29 10:01:00|      p001|              93.3|            72|           130|             3| 29.58597640775101|         0|          0|              1|
 |2026-05-29 09:56:00|2026-05-29 10:01:00|      p002|              46.5|            45|            48|             2| 2.121320343559642|         2|          0|              0|
@@ -225,7 +231,7 @@ Se vengono successivamente inviati nuovi record (es. per il paziente `p001`), do
 Batch: 2
 -------------------------------------------
 +-------------------+-------------------+----------+------------------+--------------+--------------+--------------+------------------+----------+-----------+---------------+
-|       window_start|         window_end|patient_id|average_heart_rate|min_heart_rate|max_heart_rate|total_readings|          hrv_sdhr|low_alerts|high_alerts|critical_alerts|
+|       window_start|         window_end|patient_id|average_heart_rate|min_heart_rate|max_heart_rate|total_readings|              sdhr|low_alerts|high_alerts|critical_alerts|
 +-------------------+-------------------+----------+------------------+--------------+--------------+--------------+------------------+----------+-----------+---------------+
 |2026-05-29 09:56:00|2026-05-29 10:01:00|      p001|              89.0|            70|           130|             4| 27.28858125039327|         0|          0|              1|
 +-------------------+-------------------+----------+------------------+--------------+--------------+--------------+------------------+----------+-----------+---------------+
