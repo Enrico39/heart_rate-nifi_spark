@@ -26,13 +26,14 @@ Per verificare lo stato del servizio:
 ### 3. Apertura del Tunnel SSH dal tuo Mac Locale
 Apri il terminale del tuo **Mac locale** ed avvia il tunnel di inoltro porte sicuro (lascialo aperto per tutto l'esame):
 ```bash
-ssh -i ~/.ssh/gcp_key -N -L 8090:localhost:8090 -L 8080:localhost:8080 -L 9870:localhost:9870 enricomadonna0@<IP_MASTER>
+ssh -i ~/.ssh/gcp_key -N -L 8090:127.0.0.1:8090 -L 8080:127.0.0.1:8080 -L 9870:127.0.0.1:9870 -L 8088:127.0.0.1:8088 enricomadonna0@<IP_MASTER>
 ```
 > [!NOTE]
 > Questo tunnel ti permette di accedere dal tuo Mac a:
 > * **NiFi Web UI**: `http://localhost:8090/nifi`
 > * **NiFi HTTP Ingest**: `http://localhost:8080/heartrate`
 > * **HDFS Web Browser**: `http://localhost:9870`
+> * **YARN ResourceManager UI (Spark Monitor)**: `http://localhost:8088`
 
 ---
 
