@@ -12,7 +12,18 @@ Accedi alla Google Cloud Console tramite browser e verifica che tutte e 3 le ist
 gcloud compute instances start cluster-bfb8-w-0 cluster-bfb8-w-1 --zone europe-west1-c
 ```
 
-### 2. Apertura del Tunnel SSH dal tuo Mac Locale
+### 2. Avvio di Apache NiFi sul Master VM
+Se Apache NiFi non è già in esecuzione sul nodo Master (dopo un riavvio della VM), connettiti in SSH al Master VM ed avvialo:
+```bash
+~/nifi/bin/nifi.sh start
+```
+Per verificare lo stato del servizio:
+```bash
+~/nifi/bin/nifi.sh status
+```
+*(Nota: Il caricamento iniziale dell'interfaccia web di NiFi può richiedere da 1 a 2 minuti).*
+
+### 3. Apertura del Tunnel SSH dal tuo Mac Locale
 Apri il terminale del tuo **Mac locale** ed avvia il tunnel di inoltro porte sicuro (lascialo aperto per tutto l'esame):
 ```bash
 ssh -i ~/.ssh/gcp_key -N -L 8090:localhost:8090 -L 8080:localhost:8080 -L 9870:localhost:9870 enricomadonna0@<IP_MASTER>
