@@ -48,8 +48,8 @@ La pipeline di calcolo del job esegue i seguenti passaggi:
        v  (Schema Validation & Cast)
 [Processed DataFrame (timestamp -> TimestampType)]
        |
-       v  (groupBy patient_id & aggregazioni condizionali)
-[Aggregated DataFrame (average, min, max, alert counts)]
+       v  (withWatermark & groupBy window, patient_id)
+[Aggregated DataFrame (window, average, min, max, HRV, alert counts)]
        |
        v  (writeStream in OutputMode update)
 [Console Out (Micro-Batch triggers ogni 5 secondi)]
@@ -57,25 +57,30 @@ La pipeline di calcolo del job esegue i seguenti passaggi:
 
 1. **Lettura Continua**: Carica i file NDJSON come flusso di dati non strutturato tramite `.readStream` sulla directory `/user/enricomadonna0/nifi-demo/output`.
 2. **Validazione dello Schema**: Mappa i dati in ingresso sullo schema statico definito.
-3. **Conversione Temporale**: Converte il campo stringa `timestamp` in un tipo temporale nativo (`TimestampType`) di Spark usando la funzione `.cast("timestamp")`. Questa colonna è pronta per eventuali future estensioni con finestre temporali (*windowing* o *watermarking*).
-4. **Calcolo Metriche**: Raggruppa i record per paziente e applica le aggregazioni.
-5. **Invio al Console Sink**: Scrive i risultati intermedi dell'aggregazione su stdout.
+3. **Conversione Temporale**: Converte il campo stringa `timestamp` in un tipo temporale nativo (`TimestampType`) di Spark usando la funzione `.cast("timestamp")`. La colonna risultante `event_time` viene usata per abilitare finestre temporali e watermarking.
+4. **Watermarking & Windowing**: Applica un watermark di 10 minuti per consentire la gestione di eventi tardivi ed evitare la crescita incontrollata dello stato in memoria. I dati vengono raggruppati in finestre scorrevoli di 5 minuti, con uno scorrimento di 10 secondi.
+5. **Calcolo Metriche**: Raggruppa i record per finestra e per paziente, calcolando la media, il minimo, il massimo, il conteggio degli alert e la variabilità della frequenza cardiaca (HRV) stimata tramite deviazione standard.
+6. **Appiattimento del Window Struct**: Seleziona ed estrae `window.start` e `window.end` come stringhe (`window_start`, `window_end`) per una visualizzazione pulita in console.
+7. **Invio al Console Sink**: Scrive i risultati intermedi dell'aggregazione su stdout.
 
 ---
 
 ## 4. Aggregations
 
-Il job effettua aggregazioni cumulative per ciascun `patient_id`. Vengono calcolati in tempo reale i seguenti indicatori statistici:
+Il job effettua aggregazioni su finestre scorrevoli di 5 minuti per ciascun `patient_id` con un watermark di 10 minuti. Vengono calcolati in tempo reale i seguenti indicatori statistici:
 
 | Metrica | Funzione Spark Utilizzata | Descrizione |
 | :--- | :--- | :--- |
-| **Media Battiti** | `avg("heart_rate")` | Calcola la media mobile dei bpm storici ricevuti per il paziente. |
-| **Minimo Battito** | `min("heart_rate")` | Registra il valore di bpm più basso rilevato dal wearable. |
-| **Massimo Battito** | `max("heart_rate")` | Registra il valore di bpm più alto rilevato dal wearable. |
-| **Letture Totali** | `count("patient_id")` | Numero totale di campionamenti inviati dal dispositivo. |
-| **Low Alerts** | `count(when(col("alert_type") == "low_alert", 1))` | Conteggio di eventi con frequenza cardiaca inferiore a 50 bpm. |
+| **Window Start** | `window.start` | Timestamp di inizio della finestra scorrevole corrente. |
+| **Window End** | `window.end` | Timestamp di fine della finestra scorrevole corrente. |
+| **Media Battiti** | `avg("heart_rate")` | Calcola la media mobile dei bpm all'interno della finestra di 5 minuti. |
+| **Minimo Battito** | `min("heart_rate")` | Registra il valore di bpm più basso rilevato all'interno della finestra. |
+| **Massimo Battito** | `max("heart_rate")` | Registra il valore di bpm più alto rilevato all'interno della finestra. |
+| **Letture Totali** | `count("patient_id")` | Numero totale di campionamenti inviati dal dispositivo nella finestra. |
+| **Heart Rate Variability (HRV)** | `stddev_samp("heart_rate")` | Deviazione standard campionaria (SDHR) che funge da proxy per l'HRV. |
+| **Low Alerts** | `count(when(col("alert_type") == "low_alert", 1))` | Conteggio di eventi con frequenza cardiaca inferiore a 50 bpm nella finestra. |
 | **High Alerts** | `count(when(col("alert_type") == "high_alert", 1))` | Conteggio di eventi tachicardici compatibili con attività fisica. |
-| **Critical Alerts** | `count(when(col("alert_type") == "critical_alert", 1))` | Conteggio di eventi tachicardici rilevati a riposo (critici). |
+| **Critical Alerts** | `count(when(col("alert_type") == "critical_alert", 1))` | Conteggio di eventi tachicardici rilevati a riposo (critici) nella finestra. |
 
 ---
 
@@ -88,7 +93,7 @@ Di seguito viene riportato il codice completo del job PySpark da salvare come [h
 # -*- coding: utf-8 -*-
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, when, avg, min, max, count
+from pyspark.sql.functions import col, when, avg, min, max, count, window, stddev_samp
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType
 
 def main():
@@ -125,18 +130,37 @@ def main():
     processed_df = streaming_df \
         .withColumn("event_time", col("timestamp").cast("timestamp"))
 
-    # Calcolo delle metriche aggregate per paziente
+    # Calcolo delle metriche aggregate per finestra scorrevole e paziente
     patient_metrics = processed_df \
-        .groupBy("patient_id") \
+        .withWatermark("event_time", "10 minutes") \
+        .groupBy(
+            window(col("event_time"), "5 minutes", "10 seconds"),
+            col("patient_id")
+        ) \
         .agg(
             avg("heart_rate").alias("average_heart_rate"),
             min("heart_rate").alias("min_heart_rate"),
             max("heart_rate").alias("max_heart_rate"),
             count("patient_id").alias("total_readings"),
+            # Deviazione standard del battito cardiaco come proxy dell'HRV
+            stddev_samp("heart_rate").alias("hrv_sdhr"),
             # Conteggi condizionali basati sul campo esplicito alert_type
             count(when(col("alert_type") == "low_alert", 1)).alias("low_alerts"),
             count(when(col("alert_type") == "high_alert", 1)).alias("high_alerts"),
             count(when(col("alert_type") == "critical_alert", 1)).alias("critical_alerts")
+        ) \
+        .select(
+            col("window.start").cast("string").alias("window_start"),
+            col("window.end").cast("string").alias("window_end"),
+            col("patient_id"),
+            col("average_heart_rate"),
+            col("min_heart_rate"),
+            col("max_heart_rate"),
+            col("total_readings"),
+            col("hrv_sdhr"),
+            col("low_alerts"),
+            col("high_alerts"),
+            col("critical_alerts")
         )
 
     # Scrittura dello stream analitico su console con outputMode "update"
@@ -186,25 +210,25 @@ All'avvio, il job attende i file da HDFS. Quando il simulatore invia il batch di
 -------------------------------------------
 Batch: 1
 -------------------------------------------
-+----------+------------------+--------------+--------------+--------------+----------+-----------+---------------+
-|patient_id|average_heart_rate|min_heart_rate|max_heart_rate|total_readings|low_alerts|high_alerts|critical_alerts|
-+----------+------------------+--------------+--------------+--------------+----------+-----------+---------------+
-|      p001|              93.3|            72|           130|             3|         0|          0|              1|
-|      p002|              46.5|            45|            48|             2|         2|          0|              0|
-+----------+------------------+--------------+--------------+--------------+----------+-----------+---------------+
++-------------------+-------------------+----------+------------------+--------------+--------------+--------------+------------------+----------+-----------+---------------+
+|       window_start|         window_end|patient_id|average_heart_rate|min_heart_rate|max_heart_rate|total_readings|          hrv_sdhr|low_alerts|high_alerts|critical_alerts|
++-------------------+-------------------+----------+------------------+--------------+--------------+--------------+------------------+----------+-----------+---------------+
+|2026-05-29 09:56:00|2026-05-29 10:01:00|      p001|              93.3|            72|           130|             3| 29.58597640775101|         0|          0|              1|
+|2026-05-29 09:56:00|2026-05-29 10:01:00|      p002|              46.5|            45|            48|             2| 2.121320343559642|         2|          0|              0|
++-------------------+-------------------+----------+------------------+--------------+--------------+--------------+------------------+----------+-----------+---------------+
 ```
 
-Se vengono successivamente inviati nuovi record (es. per il paziente `p001`), dopo 5 secondi comparirà il batch successivo contenente **solo** le informazioni aggiornate:
+Se vengono successivamente inviati nuovi record (es. per il paziente `p001`), dopo 5 secondi comparirà il batch successivo contenente solo le finestre aggiornate:
 
 ```text
 -------------------------------------------
 Batch: 2
 -------------------------------------------
-+----------+------------------+--------------+--------------+--------------+----------+-----------+---------------+
-|patient_id|average_heart_rate|min_heart_rate|max_heart_rate|total_readings|low_alerts|high_alerts|critical_alerts|
-+----------+------------------+--------------+--------------+--------------+----------+-----------+---------------+
-|      p001|              89.0|            70|           130|             4|         0|          0|              1|
-+----------+------------------+--------------+--------------+--------------+----------+-----------+---------------+
++-------------------+-------------------+----------+------------------+--------------+--------------+--------------+------------------+----------+-----------+---------------+
+|       window_start|         window_end|patient_id|average_heart_rate|min_heart_rate|max_heart_rate|total_readings|          hrv_sdhr|low_alerts|high_alerts|critical_alerts|
++-------------------+-------------------+----------+------------------+--------------+--------------+--------------+------------------+----------+-----------+---------------+
+|2026-05-29 09:56:00|2026-05-29 10:01:00|      p001|              89.0|            70|           130|             4| 27.28858125039327|         0|          0|              1|
++-------------------+-------------------+----------+------------------+--------------+--------------+--------------+------------------+----------+-----------+---------------+
 ```
 
 ---

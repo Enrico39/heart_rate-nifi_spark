@@ -15,7 +15,7 @@ gcloud compute instances start cluster-bfb8-w-0 cluster-bfb8-w-1 --zone europe-w
 ### 2. Apertura del Tunnel SSH dal tuo Mac Locale
 Apri il terminale del tuo **Mac locale** ed avvia il tunnel di inoltro porte sicuro (lascialo aperto per tutto l'esame):
 ```bash
-ssh -i ~/.ssh/gcp_key -N -L 8090:localhost:8090 -L 8080:localhost:8080 -L 9870:localhost:9870 enricomadonna0@35.205.152.246
+ssh -i ~/.ssh/gcp_key -N -L 8090:localhost:8090 -L 8080:localhost:8080 -L 9870:localhost:9870 enricomadonna0@<IP_MASTER>
 ```
 > [!NOTE]
 > Questo tunnel ti permette di accedere dal tuo Mac a:

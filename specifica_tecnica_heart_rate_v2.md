@@ -204,13 +204,13 @@ Tutti i file confluiscono in un'unica directory radice:
 
 ## 5. Spark Job v2
 
-Il job Spark v2 è concepito per leggere lo stream di file NDJSON da HDFS in modo continuo ed estremamente robusto. Rileva il campo `alert_type` direttamente dal JSON.
+Il job Spark v2 è concepito per leggere lo stream di file NDJSON da HDFS in modo continuo ed estremamente robusto, applicando finestre temporali scorrevoli con watermark e calcolando la variabilità del battito (HRV). Rileva il campo `alert_type` direttamente dal JSON.
 
 ### 5.1 Codice Spark (`heart_rate_streaming_v2.py`)
 
 ```python
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, when, avg, min, max, count
+from pyspark.sql.functions import col, when, avg, min, max, count, window, stddev_samp
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType
 
 def main():
@@ -245,18 +245,37 @@ def main():
     processed_df = streaming_df \
         .withColumn("event_time", col("timestamp").cast("timestamp"))
 
-    # Calcolo delle metriche aggregate per paziente
+    # Calcolo delle metriche aggregate per finestra scorrevole e paziente
     patient_metrics = processed_df \
-        .groupBy("patient_id") \
+        .withWatermark("event_time", "10 minutes") \
+        .groupBy(
+            window(col("event_time"), "5 minutes", "10 seconds"),
+            col("patient_id")
+        ) \
         .agg(
             avg("heart_rate").alias("average_heart_rate"),
             min("heart_rate").alias("min_heart_rate"),
             max("heart_rate").alias("max_heart_rate"),
             count("patient_id").alias("total_readings"),
+            # Deviazione standard del battito cardiaco come proxy dell'HRV
+            stddev_samp("heart_rate").alias("hrv_sdhr"),
             # Conteggi condizionali basati sul campo esplicito alert_type
             count(when(col("alert_type") == "low_alert", 1)).alias("low_alerts"),
             count(when(col("alert_type") == "high_alert", 1)).alias("high_alerts"),
             count(when(col("alert_type") == "critical_alert", 1)).alias("critical_alerts")
+        ) \
+        .select(
+            col("window.start").cast("string").alias("window_start"),
+            col("window.end").cast("string").alias("window_end"),
+            col("patient_id"),
+            col("average_heart_rate"),
+            col("min_heart_rate"),
+            col("max_heart_rate"),
+            col("total_readings"),
+            col("hrv_sdhr"),
+            col("low_alerts"),
+            col("high_alerts"),
+            col("critical_alerts")
         )
 
     # Output dello stream su console in modalità update
@@ -324,12 +343,12 @@ Una sequenza lineare e priva di intoppi da eseguire sul cluster Dataproc.
   -------------------------------------------
   Batch: 1
   -------------------------------------------
-  +----------+------------------+--------------+--------------+--------------+----------+-----------+---------------+
-  |patient_id|average_heart_rate|min_heart_rate|max_heart_rate|total_readings|low_alerts|high_alerts|critical_alerts|
-  +----------+------------------+--------------+--------------+--------------+----------+-----------+---------------+
-  |      p001|              93.3|            72|           130|             3|         0|          0|              1|
-  |      p002|              46.5|            45|            48|             2|         2|          0|              0|
-  +----------+------------------+--------------+--------------+--------------+----------+-----------+---------------+
+  +-------------------+-------------------+----------+------------------+--------------+--------------+--------------+------------------+----------+-----------+---------------+
+  |       window_start|         window_end|patient_id|average_heart_rate|min_heart_rate|max_heart_rate|total_readings|          hrv_sdhr|low_alerts|high_alerts|critical_alerts|
+  +-------------------+-------------------+----------+------------------+--------------+--------------+--------------+------------------+----------+-----------+---------------+
+  |2026-05-29 09:56:00|2026-05-29 10:01:00|      p001|              93.3|            72|           130|             3| 29.58597640775101|         0|          0|              1|
+  |2026-05-29 09:56:00|2026-05-29 10:01:00|      p002|              46.5|            45|            48|             2| 2.121320343559642|         2|          0|              0|
+  +-------------------+-------------------+----------+------------------+--------------+--------------+--------------+------------------+----------+-----------+---------------+
   ```
 
 ---

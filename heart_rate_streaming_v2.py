@@ -12,7 +12,7 @@ Per eseguire il job su Dataproc:
 """
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, when, avg, min, max, count
+from pyspark.sql.functions import col, when, avg, min, max, count, window, stddev_samp
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType
 
 def main():
@@ -57,19 +57,39 @@ def main():
     processed_df = streaming_df \
         .withColumn("event_time", col("timestamp").cast("timestamp"))
 
-    # 6. Aggregazione Real-Time per paziente
-    # Calcolo delle metriche aggregate cumulative (Running totals)
+    # 6. Aggregazione Real-Time per paziente con sliding window e watermark
+    # Applichiamo un watermark di 10 minuti per consentire la gestione di dati tardivi e pulire lo stato in memoria.
+    # La finestra scorrevole è di 5 minuti, con uno scorrimento di 10 secondi.
     patient_metrics = processed_df \
-        .groupBy("patient_id") \
+        .withWatermark("event_time", "10 minutes") \
+        .groupBy(
+            window(col("event_time"), "5 minutes", "10 seconds"),
+            col("patient_id")
+        ) \
         .agg(
             avg("heart_rate").alias("average_heart_rate"),
             min("heart_rate").alias("min_heart_rate"),
             max("heart_rate").alias("max_heart_rate"),
             count("patient_id").alias("total_readings"),
+            # Calcolo della deviazione standard del battito cardiaco come proxy dell'HRV (Heart Rate Variability)
+            stddev_samp("heart_rate").alias("hrv_sdhr"),
             # Conteggi condizionali degli allarmi basati sul campo 'alert_type' arricchito da NiFi
             count(when(col("alert_type") == "low_alert", 1)).alias("low_alerts"),
             count(when(col("alert_type") == "high_alert", 1)).alias("high_alerts"),
             count(when(col("alert_type") == "critical_alert", 1)).alias("critical_alerts")
+        ) \
+        .select(
+            col("window.start").cast("string").alias("window_start"),
+            col("window.end").cast("string").alias("window_end"),
+            col("patient_id"),
+            col("average_heart_rate"),
+            col("min_heart_rate"),
+            col("max_heart_rate"),
+            col("total_readings"),
+            col("hrv_sdhr"),
+            col("low_alerts"),
+            col("high_alerts"),
+            col("critical_alerts")
         )
 
     # 7. Scrittura dei risultati sulla Console
