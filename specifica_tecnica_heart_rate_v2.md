@@ -302,6 +302,7 @@ Una sequenza lineare e priva di intoppi da eseguire sul cluster Dataproc.
 1. **Pulisci e Inizializza HDFS**: Rimuovi eventuali file rimasti da vecchie sessioni per non inquinare la demo.
    ```bash
    hdfs dfs -rm -r -f /user/enricomadonna0/nifi-demo/output
+   hdfs dfs -rm -r -f /user/enricomadonna0/nifi-demo/checkpoint
    hdfs dfs -mkdir -p /user/enricomadonna0/nifi-demo/output
    hdfs dfs -chmod -R 777 /user/enricomadonna0/nifi-demo
    ```
