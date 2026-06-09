@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+
+# Script di avvio rapido per il Job Spark Streaming (IoMT MVP)
+# Creato per la presentazione d'esame
+
+# Default a 1 executor, ma supporta l'opzione a 2 executors passando '2' come argomento
+NUM_EXECS=1
+if [ "$1" == "2" ]; then
+  NUM_EXECS=2
+fi
+
+echo "========================================================================="
+echo "       AVVIO RAPIDO: SPARK STRUCTURED STREAMING (IoMT CLINICAL ANALYTICS) "
+echo "========================================================================="
+echo "Deploy Mode: YARN Client"
+echo "Resources: $NUM_EXECS Executor(s), 1 Core, 1G Memory"
+echo "-------------------------------------------------------------------------"
+
+# Eseguiamo il clean-up dei checkpoint in HDFS per prevenire l'errore StateSchemaNotCompatible
+echo "[1/2] Pulizia automatica della directory di checkpoint in HDFS..."
+hdfs dfs -rm -r -f /user/enricomadonna0/nifi-demo/checkpoint
+
+echo "[2/2] Avvio del job Spark..."
+echo "-------------------------------------------------------------------------"
+
+spark-submit \
+  --master yarn \
+  --deploy-mode client \
+  --num-executors $NUM_EXECS \
+  --executor-cores 1 \
+  --executor-memory 1G \
+  --driver-memory 1G \
+  heart_rate_streaming_v2.py
