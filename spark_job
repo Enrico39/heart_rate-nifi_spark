@@ -20,7 +20,16 @@ echo "-------------------------------------------------------------------------"
 echo "[1/2] Pulizia automatica della directory di checkpoint in HDFS..."
 hdfs dfs -rm -r -f /user/enricomadonna0/nifi-demo/checkpoint
 
-echo "[2/2] Avvio del job Spark..."
+echo "[2/2] Avvio del job Spark con il seguente comando:"
+echo "-------------------------------------------------------------------------"
+echo "spark-submit \\"
+echo "  --master yarn \\"
+echo "  --deploy-mode client \\"
+echo "  --num-executors $NUM_EXECS \\"
+echo "  --executor-cores 1 \\"
+echo "  --executor-memory 1G \\"
+echo "  --driver-memory 1G \\"
+echo "  heart_rate_streaming_v2.py"
 echo "-------------------------------------------------------------------------"
 
 spark-submit \
