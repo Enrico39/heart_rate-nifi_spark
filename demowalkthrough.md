@@ -50,6 +50,10 @@ hdfs dfs -rm -r -f /user/enricomadonna0/nifi-demo/checkpoint
 **Dove**: Browser web sul tuo Mac.
 
 1. Apri il browser all'indirizzo **`http://localhost:8090/nifi`**.
+   > [!IMPORTANT]
+   > Se la pagina non si carica o restituisce errore di connessione, assicurati che:
+   > - Apache NiFi sia stato avviato sul **Master VM** con il comando: `~/nifi/bin/nifi.sh start`
+   > - Il tunnel SSH sul tuo **Mac locale** sia attivo e configurato sulla porta `8090`.
 2. Verifica che sul canvas sia presente il flusso `HeartRate_MVP_v2` con gli 8 processori collegati.
 3. Assicurati che **tutti i processori siano in esecuzione** (icona cerchio verde con simbolo "Play"). 
    * *Se fossero fermi (quadrato rosso)*: fai `Cmd+A` per selezionarli tutti, clicca con il tasto destro su un punto vuoto del canvas e premi **Start**.
