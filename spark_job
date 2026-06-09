@@ -3,10 +3,10 @@
 # Script di avvio rapido per il Job Spark Streaming (IoMT MVP)
 # Creato per la presentazione d'esame
 
-# Default a 1 executor, ma supporta l'opzione a 2 executors passando '2' come argomento
-NUM_EXECS=1
-if [ "$1" == "2" ]; then
-  NUM_EXECS=2
+# Default a 2 executors, ma supporta l'opzione a 1 executor passando '1' come argomento
+NUM_EXECS=2
+if [ "$1" == "1" ]; then
+  NUM_EXECS=1
 fi
 
 echo "========================================================================="
