@@ -77,25 +77,38 @@ def main():
             count(when(col("alert_type") == "low_alert", 1)).alias("low_alerts"),
             count(when(col("alert_type") == "high_alert", 1)).alias("high_alerts"),
             count(when(col("alert_type") == "critical_alert", 1)).alias("critical_alerts")
+        )
+
+    # 6.1 Clinical Profiling (Rest-vs-Activity Alert Ratio)
+    # total_alerts = low_alerts + high_alerts + critical_alerts
+    # resting_alerts = low_alerts + critical_alerts (alerts occurring during sleep or rest)
+    patient_profiled = patient_metrics \
+        .withColumn("total_alerts", col("low_alerts") + col("high_alerts") + col("critical_alerts")) \
+        .withColumn("resting_alerts", col("low_alerts") + col("critical_alerts")) \
+        .withColumn("rest_alert_ratio",
+            when(col("total_alerts") > 0, col("resting_alerts") / col("total_alerts"))
+            .otherwise(0.0)
+        ) \
+        .withColumn("clinical_profile",
+            when(col("total_alerts") == 0, "STABLE")
+            .when(col("rest_alert_ratio") > 0.5, "ARRHYTHMIA SUSPECTED")
+            .otherwise("PHYSIOLOGICAL EXERTION")
         ) \
         .select(
             col("window.start").cast("string").alias("window_start"),
             col("window.end").cast("string").alias("window_end"),
             col("patient_id"),
             col("average_heart_rate"),
-            col("min_heart_rate"),
-            col("max_heart_rate"),
-            col("total_readings"),
             col("sdhr"),
-            col("low_alerts"),
-            col("high_alerts"),
-            col("critical_alerts")
+            col("total_readings"),
+            col("total_alerts"),
+            col("clinical_profile")
         )
 
     # 7. Scrittura dei risultati sulla Console
     # 'update' mode assicura che in console compaiano solo le righe che hanno subito modifiche
     # nell'ultimo micro-batch (ottimale per la demo live)
-    query = patient_metrics.writeStream \
+    query = patient_profiled.writeStream \
         .outputMode("update") \
         .format("console") \
         .trigger(processingTime="15 seconds") \

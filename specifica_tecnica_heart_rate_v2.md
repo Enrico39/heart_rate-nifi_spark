@@ -263,23 +263,36 @@ def main():
             count(when(col("alert_type") == "low_alert", 1)).alias("low_alerts"),
             count(when(col("alert_type") == "high_alert", 1)).alias("high_alerts"),
             count(when(col("alert_type") == "critical_alert", 1)).alias("critical_alerts")
+        )
+
+    # 6.1 Clinical Profiling (Rest-vs-Activity Alert Ratio)
+    # total_alerts = low_alerts + high_alerts + critical_alerts
+    # resting_alerts = low_alerts + critical_alerts (alerts occurring during sleep or rest)
+    patient_profiled = patient_metrics \
+        .withColumn("total_alerts", col("low_alerts") + col("high_alerts") + col("critical_alerts")) \
+        .withColumn("resting_alerts", col("low_alerts") + col("critical_alerts")) \
+        .withColumn("rest_alert_ratio",
+            when(col("total_alerts") > 0, col("resting_alerts") / col("total_alerts"))
+            .otherwise(0.0)
+        ) \
+        .withColumn("clinical_profile",
+            when(col("total_alerts") == 0, "STABLE")
+            .when(col("rest_alert_ratio") > 0.5, "ARRHYTHMIA SUSPECTED")
+            .otherwise("PHYSIOLOGICAL EXERTION")
         ) \
         .select(
             col("window.start").cast("string").alias("window_start"),
             col("window.end").cast("string").alias("window_end"),
             col("patient_id"),
             col("average_heart_rate"),
-            col("min_heart_rate"),
-            col("max_heart_rate"),
-            col("total_readings"),
             col("sdhr"),
-            col("low_alerts"),
-            col("high_alerts"),
-            col("critical_alerts")
+            col("total_readings"),
+            col("total_alerts"),
+            col("clinical_profile")
         )
 
     # Output dello stream su console in modalità update
-    query = patient_metrics.writeStream \
+    query = patient_profiled.writeStream \
         .outputMode("update") \
         .format("console") \
         .trigger(processingTime="15 seconds") \
@@ -344,12 +357,13 @@ Una sequenza lineare e priva di intoppi da eseguire sul cluster Dataproc.
   -------------------------------------------
   Batch: 1
   -------------------------------------------
-  +-------------------+-------------------+----------+------------------+--------------+--------------+--------------+------------------+----------+-----------+---------------+
-  |       window_start|         window_end|patient_id|average_heart_rate|min_heart_rate|max_heart_rate|total_readings|              sdhr|low_alerts|high_alerts|critical_alerts|
-  +-------------------+-------------------+----------+------------------+--------------+--------------+--------------+------------------+----------+-----------+---------------+
-  |2026-05-29 09:56:00|2026-05-29 10:01:00|      p001|              93.3|            72|           130|             3| 29.58597640775101|         0|          0|              1|
-  |2026-05-29 09:56:00|2026-05-29 10:01:00|      p002|              46.5|            45|            48|             2| 2.121320343559642|         2|          0|              0|
-  +-------------------+-------------------+----------+------------------+--------------+--------------+--------------+------------------+----------+-----------+---------------+
+  +-------------------+-------------------+----------+------------------+------------------+--------------+------------+----------------------+
+  |       window_start|         window_end|patient_id|average_heart_rate|              sdhr|total_readings|total_alerts|      clinical_profile|
+  +-------------------+-------------------+----------+------------------+------------------+--------------+------------+----------------------+
+  |2026-05-29 09:56:00|2026-05-29 10:01:00|      p001|              93.3| 29.58597640775101|             3|           1|  ARRHYTHMIA SUSPECTED|
+  |2026-05-29 09:56:00|2026-05-29 10:01:00|      p002|             126.2|  2.12132034355964|             4|           4|PHYSIOLOGICAL EXERTION|
+  |2026-05-29 09:56:00|2026-05-29 10:01:00|      p003|              72.5|  1.52132034355964|             5|           0|                STABLE|
+  +-------------------+-------------------+----------+------------------+------------------+--------------+------------+----------------------+
   ```
 
 ---
