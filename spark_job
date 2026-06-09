@@ -16,11 +16,7 @@ echo "Deploy Mode: YARN Client"
 echo "Resources: $NUM_EXECS Executor(s), 1 Core, 1G Memory"
 echo "-------------------------------------------------------------------------"
 
-# Eseguiamo il clean-up dei checkpoint in HDFS per prevenire l'errore StateSchemaNotCompatible
-echo "[1/2] Pulizia automatica della directory di checkpoint in HDFS..."
-hdfs dfs -rm -r -f /user/enricomadonna0/nifi-demo/checkpoint
-
-echo "[2/2] Avvio del job Spark con il seguente comando:"
+echo "Avvio del job Spark con il seguente comando:"
 echo "-------------------------------------------------------------------------"
 echo "spark-submit \\"
 echo "  --master yarn \\"

@@ -35,6 +35,14 @@ ssh -i ~/.ssh/gcp_key -N -L 8090:127.0.0.1:8090 -L 8080:127.0.0.1:8080 -L 9870:1
 > * **HDFS Web Browser**: `http://localhost:9870`
 > * **YARN ResourceManager UI (Spark Monitor)**: `http://localhost:8088`
 
+### 4. Pulizia Iniziale dello Stato (Opzionale - Per avviare la demo da zero)
+Se desideri che la tabella parta completamente vuota e mostri l'arrivo dei dati in tempo reale sotto gli occhi del professore, esegui questi comandi sul terminale SSH del **Master VM**:
+```bash
+hdfs dfs -rm -r -f /user/enricomadonna0/nifi-demo/output/*
+hdfs dfs -rm -r -f /user/enricomadonna0/nifi-demo/checkpoint
+```
+*Nota: Questo eliminerà lo storico delle esecuzioni precedenti e resetterà lo stato di Spark.*
+
 ---
 
 ## 🚀 FASE 1: Configurazione ed Avvio del Flusso su Apache NiFi
@@ -57,17 +65,11 @@ ssh -i ~/.ssh/gcp_key -N -L 8090:127.0.0.1:8090 -L 8080:127.0.0.1:8080 -L 9870:1
    ```bash
    cd ~
    ```
-3. Lancia il job Spark Structured Streaming inviandolo a YARN in modalità client:
+3. Lancia il job Spark Structured Streaming utilizzando lo script runner `./spark_job` (che avvia il job con 2 esecutori di default su YARN):
    ```bash
-   spark-submit \
-     --master yarn \
-     --deploy-mode client \
-     --num-executors 1 \
-     --executor-cores 1 \
-     --executor-memory 1G \
-     --driver-memory 1G \
-     heart_rate_streaming_v2.py
+   ./spark_job
    ```
+   *(Nota: Se vuoi avviarlo con 1 solo esecutore per risparmiare risorse sul cluster, puoi passare il parametro `1`: `./spark_job 1`)*
 4. Attendi che Spark finisca l'inizializzazione e si posizioni in ascolto. Vedrai a schermo il log di avvio e una tabella vuota (in attesa di file da HDFS):
    ```text
    =========================================================================
